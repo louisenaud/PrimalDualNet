@@ -14,6 +14,9 @@ from differential_operators import ForwardGradient, BackwardDivergence
 from energies import PrimalEnergyROF, DualEnergyROF
 
 class PrimalUpdate(nn.Module):
+    """
+    Class to compute the primal update for the ROF model in the Primal Dual setup.
+    """
     def __init__(self, lambda_rof, tau):
         super(PrimalUpdate, self).__init__()
         self.backward_div = BackwardDivergence()
@@ -25,7 +28,28 @@ class PrimalUpdate(nn.Module):
              self.lambda_rof * self.tau * img_obs) / (1.0 + self.lambda_rof * self.tau)
         return x
 
+
+class PrimalWeightedUpdate(nn.Module):
+    """
+    Class to compute the Primal update for the weighted version of the ROF model i.e. :
+    ||x-f||^2 + sum(wi |xi - xj|)
+    """
+    def __init__(self, lambda_rof, tau):
+        super(PrimalWeightedUpdate, self).__init__()
+        self.backward_div = BackwardDivergence()
+        self.tau = tau
+        self.lambda_rof = lambda_rof
+
+    def forward(self, x, y, img_obs):
+        x = (x + self.tau * self.backward_div.forward(y, dtype=torch.cuda.FloatTensor) +
+             self.lambda_rof * self.tau * img_obs) / (1.0 + self.lambda_rof * self.tau)
+        return x
+
+
 class PrimalRegularization(nn.Module):
+    """
+    Class to compute the regularization in the Primal. 
+    """
     def __init__(self, theta):
         super(PrimalRegularization, self).__init__()
         self.theta = theta
@@ -36,6 +60,9 @@ class PrimalRegularization(nn.Module):
 
 
 class DualUpdate(nn.Module):
+    """
+    Class to compute the dual update of the ROF model. 
+    """
     def __init__(self, sigma):
         super(DualUpdate, self).__init__()
         self.forward_grad = ForwardGradient()
@@ -49,7 +76,27 @@ class DualUpdate(nn.Module):
         return y
 
 
+class DualWeightedUpdate(nn.Module):
+    """
+    Class to compute the dual update of the ROF model. 
+    """
+    def __init__(self, sigma):
+        super(DualWeightedUpdate, self).__init__()
+        self.forward_grad = ForwardGradient()
+        self.sigma = sigma
+
+    def forward(self, x_tilde, y):
+        if y.is_cuda:
+            y = y + self.sigma * self.forward_grad.forward(x_tilde, dtype=torch.cuda.FloatTensor)
+        else:
+            y = y + self.sigma * self.forward_grad.forward(x_tilde, dtype=torch.FloatTensor)
+        return y
+
+
 class PrimalDualNetwork(nn.Module):
+    """
+    Primal Dual algorithm implemented in the PyTorch framework.
+    """
     def __init__(self, max_it=20, lambda_rof=7.0, sigma=1. / (7.0 * 0.01), tau=0.01, theta=0.5):
         super(PrimalDualNetwork, self).__init__()
         self.max_it = max_it
